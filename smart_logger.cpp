@@ -22,8 +22,10 @@ double get_dynamic_k(double temp) {
         return 0.0190;  // 1.90%
     } else if (temp <= 25.0) {
         return 0.0190;  // 1.90% (flat range)
-    } else {
+    } else if (temp <= 30.0) {
         return 0.0192;  // 1.92%
+    } else {
+        return 0.0194;  // 1.94%
     }
 }
 

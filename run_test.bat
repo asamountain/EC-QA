@@ -86,6 +86,10 @@ if %errorLevel% neq 0 (
 
 echo.
 echo [4/5] Attaching device to WSL...
+
+REM Ensure WSL is running before attaching
+wsl -e echo "Waking up WSL..." >nul 2>&1
+
 usbipd attach --wsl --busid !BUSID!
 if %errorLevel% neq 0 (
     echo [ERROR] Failed to attach device to WSL
@@ -110,7 +114,7 @@ echo ===========================================================================
 echo.
 
 REM Change to the correct directory and run the program
-wsl -e bash -c "cd '/mnt/c/Users/iocrops admin/Coding/EC-QA' && if [ ! -f smart_logger ]; then echo 'ERROR: smart_logger not compiled! Run: g++ -o smart_logger smart_logger.cpp \$(pkg-config --cflags --libs libmodbus)'; exit 1; fi && sudo ./smart_logger"
+wsl -e bash -c "cd '/mnt/c/Users/user/Coding/ATCAdjustedECValuation' && (test -f smart_logger || (echo 'Compiling smart_logger...' && g++ smart_logger.cpp -o smart_logger $(pkg-config --cflags --libs libmodbus))) && sudo ./smart_logger"
 
 REM After program exits
 echo.

@@ -124,6 +124,144 @@ std::string get_timestamp() {
 }
 
 // ===========================
+// TEACHER MODE: GET TEMPERATURE CONDITION
+// ===========================
+std::string get_temp_condition(double temp) {
+    if (temp <= 5.0) {
+        return "Very Cold Range (≤5°C)";
+    } else if (temp <= 10.0) {
+        return "Cold Range (5-10°C)";
+    } else if (temp <= 15.0) {
+        return "Cool Range (10-15°C)";
+    } else if (temp <= 25.0) {
+        return "Normal Range (15-25°C)";
+    } else {
+        return "Warm Range (>25°C)";
+    }
+}
+
+// ===========================
+// TEACHER MODE: DISPLAY EDUCATIONAL DASHBOARD
+// ===========================
+void display_teacher_dashboard(double temp, double raw_ec, double sensor_ec, double smart_ec, 
+                               double k_used, int sample_count, const std::string &port) {
+    clear_screen();
+    
+    // Calculate validation metrics
+    const double STANDARD_VALUE = 12.88;
+    double sensor_error = fabs(sensor_ec - STANDARD_VALUE);
+    double smart_error = fabs(smart_ec - STANDARD_VALUE);
+    double improvement = sensor_error - smart_error;
+    
+    // Determine pass/fail
+    const double TOLERANCE = 0.10;  // ±0.10 mS/cm tolerance
+    bool sensor_pass = sensor_error <= TOLERANCE;
+    bool smart_pass = smart_error <= TOLERANCE;
+    
+    std::cout << "╔═══════════════════════════════════════════════════════════════════════╗\n";
+    std::cout << "║           🎓 TEACHER MODE: LIVE ALGORITHM VALIDATION 🎓              ║\n";
+    std::cout << "╚═══════════════════════════════════════════════════════════════════════╝\n\n";
+    
+    std::cout << "  📡 Port: " << port << " | Samples: " << sample_count 
+              << " | Time: " << get_timestamp() << "\n\n";
+    
+    // ========== SECTION A: THE "WHY" (LOGIC DISPLAY) ==========
+    std::cout << "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n";
+    std::cout << "┃ 📚 SECTION A: THE \"WHY\" - Understanding the Logic                   ┃\n";
+    std::cout << "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n\n";
+    
+    std::cout << "  Current Condition:\n";
+    std::cout << "    🌡️  Measured Temperature = " << std::fixed << std::setprecision(2) 
+              << temp << "°C  →  " << get_temp_condition(temp) << "\n\n";
+    
+    std::cout << "  Decision Logic:\n";
+    std::cout << "    🧠 Therefore, using Dynamic Coefficient k = " << std::setprecision(4) 
+              << k_used << " (" << (k_used * 100) << "%)\n";
+    std::cout << "    🔴 Sensor uses FIXED Coefficient k = 0.0200 (2.00%) ← WRONG!\n\n";
+    
+    std::cout << "  Why This Matters:\n";
+    std::cout << "    • At low temps, sensor OVER-compensates (k too high)\n";
+    std::cout << "    • Our algorithm adjusts k based on actual calibration data\n";
+    std::cout << "    • Result: More accurate readings across temperature range\n\n";
+    
+    // ========== SECTION B: THE MATH (FORMULA VISUALIZATION) ==========
+    std::cout << "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n";
+    std::cout << "┃ 🧮 SECTION B: THE MATH - Live Formula Calculation                   ┃\n";
+    std::cout << "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n\n";
+    
+    std::cout << "  Temperature Compensation Formula:\n\n";
+    std::cout << "    C₂₅ = Raw_EC / (1 + k × (Temp - 25))\n\n";
+    
+    std::cout << "  Sensor's Calculation (FIXED k=0.02):\n";
+    std::cout << "    " << std::setprecision(2) << sensor_ec << " = " << raw_ec 
+              << " / (1 + 0.0200 × (" << temp << " - 25.0))\n";
+    std::cout << "    " << sensor_ec << " = " << raw_ec << " / " 
+              << std::setprecision(4) << (1.0 + 0.02 * (temp - 25.0)) << "\n\n";
+    
+    std::cout << "  Smart Algorithm (DYNAMIC k=" << std::setprecision(4) << k_used << "):\n";
+    std::cout << "    " << std::setprecision(2) << smart_ec << " = " << raw_ec 
+              << " / (1 + " << std::setprecision(4) << k_used << " × (" 
+              << std::setprecision(2) << temp << " - 25.0))\n";
+    std::cout << "    " << smart_ec << " = " << raw_ec << " / " 
+              << std::setprecision(4) << (1.0 + k_used * (temp - 25.0)) << "\n\n";
+    
+    // ========== SECTION C: THE VERDICT (VALIDATION) ==========
+    std::cout << "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n";
+    std::cout << "┃ ⚖️  SECTION C: THE VERDICT - Validation Against Standard            ┃\n";
+    std::cout << "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n\n";
+    
+    std::cout << "  Standard Reference: 12.88 mS/cm @ 25°C\n";
+    std::cout << "  Tolerance: ±" << TOLERANCE << " mS/cm\n\n";
+    
+    std::cout << "  Distance from Standard:\n";
+    std::cout << "    🔴 Sensor Error:  " << std::setprecision(4) << std::setw(8) << sensor_error 
+              << " mS/cm  ";
+    if (sensor_pass) {
+        std::cout << "✅ PASS\n";
+    } else {
+        std::cout << "❌ FAIL (exceeds tolerance)\n";
+    }
+    
+    std::cout << "    🟢 Smart Error:   " << std::setw(8) << smart_error << " mS/cm  ";
+    if (smart_pass) {
+        std::cout << "✅ PASS\n";
+    } else {
+        std::cout << "❌ FAIL (exceeds tolerance)\n";
+    }
+    
+    std::cout << "\n  Improvement Score:\n";
+    std::cout << "    📈 Error Reduction: " << std::setprecision(4) << improvement << " mS/cm";
+    
+    if (improvement > 0) {
+        std::cout << "  ✅ Smart Algorithm is BETTER!\n";
+    } else if (improvement < 0) {
+        std::cout << "  ⚠️  Sensor Default is better (rare)\n";
+    } else {
+        std::cout << "  ➡️  No difference\n";
+    }
+    
+    std::cout << "    📊 Improvement: " << std::setprecision(1) 
+              << (sensor_error > 0 ? (improvement / sensor_error * 100.0) : 0.0) << "%\n\n";
+    
+    // ========== SUMMARY BOX ==========
+    std::cout << "┌───────────────────────────────────────────────────────────────────────┐\n";
+    std::cout << "│                         📊 QUICK SUMMARY                              │\n";
+    std::cout << "├───────────────────────────────────────────────────────────────────────┤\n";
+    std::cout << "│  🌡️  Temperature:     " << std::setprecision(2) << std::setw(10) << temp << " °C";
+    std::cout << "                                      │\n";
+    std::cout << "│  📊 Raw EC:           " << std::setw(10) << raw_ec << " mS/cm (uncompensated)";
+    std::cout << "             │\n";
+    std::cout << "│  🔴 Sensor Output:    " << std::setw(10) << sensor_ec << " mS/cm  ";
+    std::cout << (sensor_pass ? "✅ PASS" : "❌ FAIL") << "                    │\n";
+    std::cout << "│  🟢 Smart Output:     " << std::setw(10) << smart_ec << " mS/cm  ";
+    std::cout << (smart_pass ? "✅ PASS" : "❌ FAIL") << "                    │\n";
+    std::cout << "└───────────────────────────────────────────────────────────────────────┘\n\n";
+    
+    std::cout << "  💾 Logging to CSV: ec_data_log.csv\n";
+    std::cout << "  ⏹️  Press Ctrl+C to stop and analyze data\n\n";
+}
+
+// ===========================
 // MAIN PROGRAM
 // ===========================
 int main() {
@@ -165,9 +303,10 @@ int main() {
     
     csv_file.open("ec_data_log.csv", std::ios::app);
     
-    // Write header if new file
+    // Write header if new file (with enhanced validation columns)
     if (!file_exists) {
-        csv_file << "Timestamp,Temperature,Raw_EC,Sensor_Default_EC,Smart_Calc_EC,Coefficient_Used,Deviation\n";
+        csv_file << "Timestamp,Temperature,Raw_EC,Sensor_Default_EC,Smart_Calc_EC,Coefficient_Used,"
+                 << "Deviation,Distance_from_12_88_Sensor,Distance_from_12_88_Smart,Improvement_Score\n";
     }
     
     // Step 4: Main data acquisition loop
@@ -212,44 +351,26 @@ int main() {
         double k_used = get_dynamic_k(temp);
         double deviation = sensor_ec - smart_ec;
         
-        // Clear screen and display dashboard
-        clear_screen();
+        // Calculate validation metrics
+        const double STANDARD_VALUE = 12.88;
+        double distance_sensor = fabs(sensor_ec - STANDARD_VALUE);
+        double distance_smart = fabs(smart_ec - STANDARD_VALUE);
+        double improvement_score = distance_sensor - distance_smart;
         
-        std::cout << "╔═══════════════════════════════════════════════════════════════╗\n";
-        std::cout << "║         BOQU IOT-485-EC4A SMART COMPENSATION LOGGER          ║\n";
-        std::cout << "╚═══════════════════════════════════════════════════════════════╝\n\n";
+        // Display educational dashboard
+        display_teacher_dashboard(temp, raw_ec, sensor_ec, smart_ec, k_used, loop_count, port);
         
-        std::cout << "  📡 Port: " << port << " | Slave ID: 4 | Samples: " << loop_count << "\n";
-        std::cout << "  🕐 Time: " << get_timestamp() << "\n\n";
-        
-        std::cout << "┌───────────────────────────────────────────────────────────────┐\n";
-        std::cout << "│ 🌡️  Temperature:        " << std::fixed << std::setprecision(2) 
-                  << std::setw(10) << temp << " °C                    │\n";
-        std::cout << "├───────────────────────────────────────────────────────────────┤\n";
-        std::cout << "│ 📊 Raw EC (Uncomp):     " << std::setw(10) << raw_ec << " mS/cm                 │\n";
-        std::cout << "│ 🔴 Sensor Default EC:   " << std::setw(10) << sensor_ec 
-                  << " mS/cm (k=0.02 fixed)  │\n";
-        std::cout << "│ 🟢 Smart Calc EC:       " << std::setw(10) << smart_ec 
-                  << " mS/cm (k=" << std::setprecision(4) << k_used << ")      │\n";
-        std::cout << "├───────────────────────────────────────────────────────────────┤\n";
-        std::cout << "│ ⚖️  Deviation:           " << std::setprecision(4) << std::setw(10) << deviation 
-                  << " mS/cm                 │\n";
-        std::cout << "│                         " << std::setprecision(2) 
-                  << std::setw(10) << (fabs(sensor_ec) > 0.01 ? (deviation/sensor_ec)*100.0 : 0.0) 
-                  << " %                      │\n";
-        std::cout << "└───────────────────────────────────────────────────────────────┘\n\n";
-        
-        std::cout << "  💡 Expected: 12.88 mS/cm @ 25°C (Standard Solution)\n";
-        std::cout << "  📈 Goal: Prove Smart Algorithm reduces deviation\n\n";
-        
-        // Log to CSV
+        // Log to CSV with enhanced columns
         csv_file << get_timestamp() << ","
                  << temp << ","
                  << raw_ec << ","
                  << sensor_ec << ","
                  << smart_ec << ","
                  << k_used << ","
-                 << deviation << "\n";
+                 << deviation << ","
+                 << distance_sensor << ","
+                 << distance_smart << ","
+                 << improvement_score << "\n";
         csv_file.flush();
         
         // Wait 1 second before next reading

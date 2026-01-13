@@ -15,10 +15,11 @@ std::vector<std::string> get_candidate_ports() {
         ports.push_back("\\\\.\\COM" + std::to_string(i));
     }
     #else
-    // Linux: Scan standard USB and ACM ports
+    // Linux: Scan standard USB, ACM, and serial ports
     for (int i = 0; i < 10; i++) {
         ports.push_back("/dev/ttyUSB" + std::to_string(i));
         ports.push_back("/dev/ttyACM" + std::to_string(i));
+        ports.push_back("/dev/ttyS" + std::to_string(i));
     }
     #endif
     
@@ -33,37 +34,42 @@ std::string find_sensor_port() {
     std::cout << "Scanning ports for sensor..." << std::endl;
 
     for (const auto &port : port_list) {
-        // 1. Create a temporary context for this port
-        // Settings: 9600 Baud, N, 8, 1 (Must match sensor default)
-        modbus_t *ctx = modbus_new_rtu(port.c_str(), 9600, 'N', 8, 1);
+        std::cout << "Trying " << port << "..." << std::endl;
         
-        if (ctx == NULL) continue;
+        // Try different slave IDs (1-10)
+        for (int slave_id = 1; slave_id <= 10; slave_id++) {
+            // 1. Create a temporary context for this port
+            // Settings: 9600 Baud, N, 8, 1 (Must match sensor default)
+            modbus_t *ctx = modbus_new_rtu(port.c_str(), 9600, 'N', 8, 1);
+            
+            if (ctx == NULL) continue;
 
-        // 2. Set Slave ID (Default is 1)
-        modbus_set_slave(ctx, 1);
+            // 2. Set Slave ID
+            modbus_set_slave(ctx, slave_id);
 
-        // 3. IMPORTANT: Set a Short Timeout
-        // If a port is empty, we don't want to wait 5 seconds.
-        // Set timeout to 200ms (0 sec, 200000 usec)
-        modbus_set_response_timeout(ctx, 0, 200000);
+            // 3. IMPORTANT: Set a Short Timeout
+            // If a port is empty, we don't want to wait 5 seconds.
+            // Set timeout to 100ms (0 sec, 100000 usec)
+            modbus_set_response_timeout(ctx, 0, 100000);
 
-        // 4. Try to Open
-        if (modbus_connect(ctx) != -1) {
-            // 5. The "Handshake": Try to read Register 8 (Device Address)
-            // This confirms it is actually YOUR sensor, not a mouse or printer.
-            int rc = modbus_read_registers(ctx, 8, 1, tab_reg);
+            // 4. Try to Open
+            if (modbus_connect(ctx) != -1) {
+                // 5. The "Handshake": Try to read Register 8 (Device Address)
+                // This confirms it is actually YOUR sensor, not a mouse or printer.
+                int rc = modbus_read_registers(ctx, 8, 1, tab_reg);
 
-            if (rc != -1) {
-                // SUCCESS! We got a valid reply.
-                std::cout << " >> FOUND SENSOR at: " << port << std::endl;
-                std::cout << " >> Device ID: " << tab_reg[0] << std::endl;
+                if (rc != -1) {
+                    // SUCCESS! We got a valid reply.
+                    std::cout << " >> FOUND SENSOR at: " << port << " with Slave ID: " << slave_id << std::endl;
+                    std::cout << " >> Device Address Register: " << tab_reg[0] << std::endl;
+                    modbus_close(ctx);
+                    modbus_free(ctx);
+                    return port; // Return the valid port string
+                }
                 modbus_close(ctx);
-                modbus_free(ctx);
-                return port; // Return the valid port string
             }
-            modbus_close(ctx);
+            modbus_free(ctx);
         }
-        modbus_free(ctx);
     }
 
     return ""; // Return empty string if not found

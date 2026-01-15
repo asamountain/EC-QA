@@ -3,24 +3,49 @@ REM ============================================================================
 REM BOQU IOT-485-EC4A Automated Test Runner
 REM One-Click Solution for QA Intern Testing
 REM ============================================================================
+REM FEATURES:
+REM   - Auto-elevates to Administrator (triggers UAC prompt automatically)
+REM   - Auto-detects USB-SERIAL CH340 device via usbipd
+REM   - Binds and attaches device to WSL2
+REM   - Compiles and launches smart_logger in WSL
+REM ============================================================================
 
 setlocal enabledelayedexpansion
 
-echo.
-echo ============================================================================
-echo   BOQU Sensor Auto-Test Launcher
-echo ============================================================================
-echo.
+REM ============================================================================
+REM STEP 0: SELF-ELEVATION HACK (Auto-Admin)
+REM ============================================================================
+REM Check if we already have admin privileges using "net session"
+REM If not, re-launch this script as Administrator via PowerShell
 
-REM Step 1: Check if running as Administrator
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [ERROR] This script must run as Administrator!
-    echo Right-click run_test.bat and select "Run as administrator"
     echo.
-    pause
-    exit /b 1
+    echo ============================================================================
+    echo   Requesting Administrator Privileges...
+    echo ============================================================================
+    echo.
+    echo This script requires Administrator access for USB passthrough.
+    echo A UAC prompt will appear - please click "Yes" to continue.
+    echo.
+    
+    REM Use PowerShell to re-launch this batch file with elevation
+    REM -Verb RunAs triggers the UAC elevation prompt
+    REM %~dpnx0 expands to the full path of this batch file
+    REM We use Start-Process with -Wait so the elevated window stays open
+    
+    powershell -Command "Start-Process -FilePath '%~dpnx0' -Verb RunAs -Wait"
+    
+    REM Exit the non-elevated instance
+    exit /b 0
 )
+
+REM If we reach here, we have admin privileges
+echo.
+echo ============================================================================
+echo   BOQU Sensor Auto-Test Launcher [ADMINISTRATOR]
+echo ============================================================================
+echo.
 
 echo [1/5] Checking for usbipd installation...
 where usbipd >nul 2>&1
@@ -75,46 +100,67 @@ REM Check if device is shared (bound)
 usbipd list | findstr /i "!BUSID!" | findstr /i "Shared" >nul 2>&1
 if %errorLevel% neq 0 (
     echo      Device not bound. Binding now...
-    usbipd bind --busid !BUSID!
+    usbipd bind --busid !BUSID! --force
     if %errorLevel% neq 0 (
-        echo [ERROR] Failed to bind device
-        pause
-        exit /b 1
+        echo [WARNING] Bind returned error, but may still work. Continuing...
+    ) else (
+        echo      Successfully bound device
     )
-    echo      Successfully bound device
+    REM Small delay to let the bind take effect
+    timeout /t 1 /nobreak >nul
+) else (
+    echo      Device already bound/shared
 )
 
 echo.
 echo [4/5] Attaching device to WSL...
 
 REM Ensure WSL is running before attaching
-wsl -e echo "Waking up WSL..." >nul 2>&1
+echo      Waking up WSL...
+wsl -e echo "WSL Ready" >nul 2>&1
+timeout /t 1 /nobreak >nul
 
-usbipd attach --wsl --busid !BUSID!
+REM Use START /MIN for non-blocking attach (prevents script from hanging)
+REM The /B flag runs without creating a new window, /MIN minimizes if window is created
+echo      Starting USB attach (non-blocking)...
+start "USB_Link" /MIN /B usbipd attach --wsl --busid !BUSID!
+
+REM Give the attach command time to complete
+echo      Waiting for USB link to establish...
+timeout /t 4 /nobreak >nul
+
+REM Verify attachment status
+usbipd list | findstr /i "!BUSID!" | findstr /i "Attached" >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [ERROR] Failed to attach device to WSL
-    echo.
-    echo Troubleshooting:
-    echo   1. Make sure WSL is running: wsl --status
-    echo   2. Try manually: usbipd attach --wsl --busid !BUSID!
-    echo.
-    pause
-    exit /b 1
+    echo [WARNING] Device may not be fully attached yet.
+    echo           Will attempt to run anyway...
+    timeout /t 2 /nobreak >nul
+) else (
+    echo      Device successfully attached!
 )
 
-echo      Device successfully attached!
-
-REM Wait for device to initialize in WSL
-timeout /t 2 /nobreak >nul
+REM Wait for device to initialize in WSL (serial port needs time to appear)
+echo      Waiting for serial port to initialize...
+timeout /t 3 /nobreak >nul
 
 :run_program
 echo.
 echo [5/5] Launching Smart Logger in WSL...
 echo ============================================================================
 echo.
+echo NOTE: If prompted for password, enter your WSL sudo password.
+echo       Press Ctrl+C to stop logging.
+echo.
+echo ============================================================================
+echo  If the program is missing or outdated, compile manually in WSL:
+echo.
+echo    g++ smart_logger.cpp -o smart_logger -I/usr/include/modbus -lmodbus
+echo.
+echo ============================================================================
+echo.
 
-REM Change to the correct directory and run the program
-wsl -e bash -c "cd '/mnt/c/Users/user/Coding/ATCAdjustedECValuation' && (test -f smart_logger || (echo 'Compiling smart_logger...' && g++ smart_logger.cpp -o smart_logger $(pkg-config --cflags --libs libmodbus))) && sudo ./smart_logger"
+REM Simple, safe execution - just run the pre-compiled binary
+wsl bash -c "cd /mnt/c/Users/user/Coding/ATCAdjustedECValuation && sudo ./smart_logger"
 
 REM After program exits
 echo.

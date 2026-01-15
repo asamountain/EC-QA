@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <ctime>
@@ -103,6 +104,25 @@ float modbus_get_float_abcd(const uint16_t *src) {
 }
 
 // ===========================
+// HEX STRING CONVERTER (For Data Validation)
+// ===========================
+// Converts two 16-bit Modbus registers to an 8-character hex string.
+// This allows validation of IEEE 754 float conversion by logging the raw bytes.
+// Example: reg_high=0x4135 (16693), reg_low=0x1A86 (6790) → "41351A86"
+// You can verify this at: https://www.h-schmidt.net/FloatConverter/IEEE754.html
+std::string to_hex_string(uint16_t reg_high, uint16_t reg_low) {
+    std::stringstream ss;
+    // Use std::hex to switch to hexadecimal mode
+    // std::uppercase for capital letters (A-F)
+    // std::setfill('0') ensures leading zeros are preserved
+    // std::setw(4) ensures each 16-bit value outputs exactly 4 hex characters
+    ss << std::uppercase << std::hex << std::setfill('0')
+       << std::setw(4) << reg_high
+       << std::setw(4) << reg_low;
+    return ss.str();
+}
+
+// ===========================
 // CLEAR SCREEN (Cross-platform)
 // ===========================
 void clear_screen() {
@@ -146,7 +166,8 @@ std::string get_temp_condition(double temp) {
 // TEACHER MODE: DISPLAY EDUCATIONAL DASHBOARD
 // ===========================
 void display_teacher_dashboard(double temp, double raw_ec, double sensor_ec, double smart_ec, 
-                               double k_used, int sample_count, const std::string &port) {
+                               double k_used, int sample_count, const std::string &port,
+                               const std::string &hex_temp, const std::string &hex_raw_ec) {
     clear_screen();
     
     // Calculate validation metrics
@@ -174,7 +195,7 @@ void display_teacher_dashboard(double temp, double raw_ec, double sensor_ec, dou
     
     std::cout << "  Current Condition:\n";
     std::cout << "    🌡️  Measured Temperature = " << std::fixed << std::setprecision(2) 
-              << temp << "°C  →  " << get_temp_condition(temp) << "\n\n";
+              << temp << "°C  (0x" << hex_temp << ")  →  " << get_temp_condition(temp) << "\n\n";
     
     std::cout << "  Decision Logic:\n";
     std::cout << "    🧠 Therefore, using Dynamic Coefficient k = " << std::setprecision(4) 
@@ -250,9 +271,9 @@ void display_teacher_dashboard(double temp, double raw_ec, double sensor_ec, dou
     std::cout << "│                         📊 QUICK SUMMARY                              │\n";
     std::cout << "├───────────────────────────────────────────────────────────────────────┤\n";
     std::cout << "│  🌡️  Temperature:     " << std::setprecision(2) << std::setw(10) << temp << " °C";
-    std::cout << "                                      │\n";
-    std::cout << "│  📊 Raw EC:           " << std::setw(10) << raw_ec << " mS/cm (uncompensated)";
-    std::cout << "             │\n";
+    std::cout << "  [Hex: " << hex_temp << "]             │\n";
+    std::cout << "│  📊 Raw EC:           " << std::setw(10) << raw_ec << " mS/cm";
+    std::cout << "  [Hex: " << hex_raw_ec << "]             │\n";
     std::cout << "│  🔴 Sensor Output:    " << std::setw(10) << sensor_ec << " mS/cm  ";
     std::cout << (sensor_pass ? "✅ PASS" : "❌ FAIL") << "                    │\n";
     std::cout << "│  🟢 Smart Output:     " << std::setw(10) << smart_ec << " mS/cm  ";
@@ -305,15 +326,15 @@ int main() {
     
     csv_file.open("ec_data_log.csv", std::ios::app);
     
-    // Write header if new file (with enhanced validation columns)
+    // Write header if new file (with hex validation columns)
     if (!file_exists) {
-        csv_file << "Timestamp,Temperature,Raw_EC,Sensor_Default_EC,Smart_Calc_EC,Coefficient_Used,"
-                 << "Deviation,Distance_from_12_88_Sensor,Distance_from_12_88_Smart,Improvement_Score\n";
+        csv_file << "Timestamp,Temperature,Hex_Temp,Raw_EC,Hex_Raw_EC,Sensor_Default_EC,Smart_Calc_EC,Deviation\n";
     }
     
     // Step 4: Main data acquisition loop
     uint16_t reg_data[2];
     int loop_count = 0;
+    std::string hex_temp, hex_raw_ec;  // Raw hex strings for data validation
     
     while (true) {
         loop_count++;
@@ -321,6 +342,8 @@ int main() {
         // Read Temperature (Reg 60-61)
         double temp = 0.0;
         if (modbus_read_registers(ctx, 60, 2, reg_data) != -1) {
+            // Capture raw hex BEFORE float conversion for validation
+            hex_temp = to_hex_string(reg_data[0], reg_data[1]);
             temp = modbus_get_float_abcd(reg_data);
         } else {
             std::cerr << "⚠️  Failed to read temperature" << std::endl;
@@ -331,6 +354,8 @@ int main() {
         // Read Raw EC (Reg 45-46)
         double raw_ec = 0.0;
         if (modbus_read_registers(ctx, 45, 2, reg_data) != -1) {
+            // Capture raw hex BEFORE float conversion for validation
+            hex_raw_ec = to_hex_string(reg_data[0], reg_data[1]);
             raw_ec = modbus_get_float_abcd(reg_data);
         } else {
             std::cerr << "⚠️  Failed to read raw EC" << std::endl;
@@ -359,20 +384,19 @@ int main() {
         double distance_smart = fabs(smart_ec - STANDARD_VALUE);
         double improvement_score = distance_sensor - distance_smart;
         
-        // Display educational dashboard
-        display_teacher_dashboard(temp, raw_ec, sensor_ec, smart_ec, k_used, loop_count, port);
+        // Display educational dashboard (with hex validation data)
+        display_teacher_dashboard(temp, raw_ec, sensor_ec, smart_ec, k_used, loop_count, port,
+                                  hex_temp, hex_raw_ec);
         
-        // Log to CSV with enhanced columns
+        // Log to CSV with hex validation columns
         csv_file << get_timestamp() << ","
                  << temp << ","
+                 << hex_temp << ","
                  << raw_ec << ","
+                 << hex_raw_ec << ","
                  << sensor_ec << ","
                  << smart_ec << ","
-                 << k_used << ","
-                 << deviation << ","
-                 << distance_sensor << ","
-                 << distance_smart << ","
-                 << improvement_score << "\n";
+                 << deviation << "\n";
         csv_file.flush();
         
         // Wait 1 second before next reading
